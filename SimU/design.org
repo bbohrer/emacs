@@ -1,0 +1,201 @@
+I feel like writing a university simulation game. I also feel like learning emacs lisp.
+Therefore I feel like writing a university simulation game in emacs lisp.
+
+* Vague list of interesting things to simulate
+** Admissions
+** Sports
+** Fin. Aid
+** Construction / Expansion
+** Academics / Professor management
+*** Both Undergrad (classes) and Grad (research)
+** Student Life
+*** Housing
+*** Food
+*** Greek Life and Clubs
+** Employment / Internships
+** PR
+
+* Key Stats
+** Endowment
+Your total bankroll for all expenditures. This increases exponentially on its own
+thanks to interest. You can also increase your endowment through tuition and research
+grants.
+
+Major expenses are:
+
+ - Professors
+ -- TA's (except you can underpay them)
+ - Construction
+ - Housing
+ - Dining
+
+** Enrollment
+The current total number of students. Has a major effect on endowment since this is 
+the number of people giving you moneys. You also need to house/feed most (not all) of these
+people and keep an eye on the number of professors (see class size).
+
+** Prestige
+Aggregate measure of the public's image of your university. Part of the fun of the
+game should be that public image matters more than actual quality, so you can build an awful
+school that pulls off a great image without any redeeming qualities.
+
+Prestige is built up in the PR office. You can advertise several different things. They're
+more (cost-)effective if you're not lying, but you can always use them:
+
+- Employability / Starting Salary
+- Academics
+- Student Life
+- Tuition
+
+There are also awards for doing especially well in other areas that contribute directly to
+prestige:
+
+Size:
+Community College
+Small University
+(Certain) Major University
+State School
+Mega-School
+
+Academics:
+Nobel Prize (repeatable) (can have variations like Fields Medal, Turing Award)
+  Awarded randomly based on quality of professors.
+Research I (spend lots of money on research)
+Ivy League (make sure to mock how no college has ever actually been added to the Ivy League)
+NCAA Championship (3 divisions, each championship promotes to the next division)
+
+* Secondary Stats
+** Starting Salary
+** IQ
+** GPA
+** Class size
+
+
+* Controls
+Each of these sections corresponds to one game screen, which roughly
+corresponds to one building/office.
+
+** Finance
+- Set Tuition
+- Budgets:
+-- Fin. Aid
+-- Academics
+-- Housing
+-- Dining
+
+- View entire budget
+
+(P.R. is not budgeted - not a recurring expense)
+
+** Admissions
+Here you can view the number of applicants, which is a function of prestige, tuition and 
+financial aid. I don't know the exact function yet. Maybe something like:
+
+(prestige - (tuition - avg. fin. aid))^ 2
+
+Once you have the number of applicants you can set the admit rate to get the number of
+admitted students. This influences both the class size and average student quality (IQ).
+
+After you admit students, they don't all accept the offer. Accept rate is based on??? probably
+same factors as # applicants.
+
+If you admit more students than you have housing for, they have to live somewhere else and
+Student Life quality (and possibly Prestige!!) drops off.
+
+You can hire admissions counselors or buy merit-based scholarships to increase student 
+quality without affecting class size (not sure this actually adds anything to the mechanics).
+
+** Housing
+At a glance you can see enrollment and housing cap. Actions available:
+
+Build / Buy new dorm
+Expand dorm capacity
+Upgrade dorm quality
+
+# RA's / salary
+
+** Dining
+Same controls as housing, actually. However, demand is more flexible: your quality of life
+is affected less if you have too little dining. Also demand increases with quality.
+
+# Student employees / budget
+
+** PR
+Buy lots of different PR items: tour guides, summer programs, advertising compaigns, etc.
+Don't need a lot of stats to show here other than prestige and money. Maybe a rate of prestige
+increase or awards you're close to winning.
+
+** Academics (Dean's Office?)
+Have to be careful here because there's a lot of detail you can go into, but you don't want
+to force so much detail that it's impossible to control. I think it makes sense to have 3 tiers,
+all with similar controls:
+
+Controls for the whole uni
+Controls for the department
+Controls for the major
+
+What kind of controls?
+
+# Max Students
+# Professors
+# TA's (grad/undergrad)
+# RA's (grad/undergrad)
+
+Professor budget
+TA budget (grad/undergrad)
+RA budget (grad/undergrad)
+
+
+Professor teaching / research balance.
+ - Research produces prestige and research grant money,
+   teaching increases academics, also prestige
+
+Departments with fewer majors do better at everything, but each extra
+department costs money to run, so you have a tradeoff.
+
+** Career Center
+
+Buy things that increase your students' career prospects:
+
+Recruiting events
+Internships
+Career fairs
+
+** Coach
+
+Manage your sports teams: Buy a new sport, hire new coaches, recruit harder, etc.
+
+* Implementation Plan
+
+That's a nontrivial list of stuff to do, so how to go about it?
+
+** Emacs warmup
+Do some of the startup that will expose me to Emacs Lisp without going too deep into the game.
+Create a major mode for the game, create the command to start the game, create a UI for the
+start-game screen and main play screen.
+
+** Finances screen
+Universities are actually all about money, so start here.
+
+** Admissions
+Should start at the start, really
+
+** Academics
+Since this is the theoretical point of college, it should also be implemented early. However,
+this can become a really complicated screen, so start with a simple version of it.
+
+** PR
+Important to moving through the game, so this should be next.
+
+** Housing / Dining
+Student life is not quite as important but adds more complexity to the game so it's worthwhile.
+
+** Save feature?
+At the point the game might be semi-interesting so add some of the non-gameplay features in
+
+** Academics V. 2
+Now we can start focusing on depth more so go ahead and add the more complicated academics controls.
+
+** Career Center
+These are both somewhat tangential features so they can wait a bit.
+** Sports
