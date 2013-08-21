@@ -5,7 +5,20 @@
 
 (defvar uni-name)
 (defvar player-name)
+(defvar year)
+(defvar prestige)
+(defconst interest 5)
+(defvar tuition-amt)
+(defvar finaid-amt)
+(defvar endowment)
+(defvar enrollment)
 
+(setq year 1900)
+(setq prestige 0)
+(setq tuition-amt 3)
+(setq finaid-amt 1)
+(setq endowment 100)
+(setq enrollment 200)
 
 (defun simu ()
   "Play SimU"
@@ -14,6 +27,17 @@
   (kill-all-local-variables)
   (start-screen)
 )
+
+(defun setup-screen ()
+  (widget-setup)
+  (widget-beginning-of-line))
+
+(defun print-stats ()
+  (widget-insert (propertize (format "  Year: %d      Endowment: $%dK     Prestige: %d\n"
+                                     year endowment prestige)
+                             'font-lock-face 
+                             '(:foreground "white" :background "black")))
+  (widget-insert "\n"))
 
 (defvar start-player-name)
 (defvar start-univ-name)
@@ -59,7 +83,7 @@ private school, or burgeoning state school.
                            (widget-delete start-start-button)
                            (main-screen))
                  "Let's Go!"))
-    (widget-setup))
+    (setup-screen))
 
 (defun spacer () (widget-insert "\n\n"))
 
@@ -71,13 +95,22 @@ private school, or burgeoning state school.
   (widget-delete main-housing)
   (widget-delete main-dining)
   (widget-delete main-sports)
-  (widget-delete main-career))
+  (widget-delete main-career)
+  (widget-delete main-advance))
+
+(defun advance-year ()
+  (setq endowment (+ endowment (finance-profit)))
+  (setq year (1+ year)))
 
 (defun main-screen ()
   "Primary game screen - allows selecting between other screens"
   (force-erase-buffer)
-  (widget-insert (format "You are %s, supreme ruler of %s.
-From here you can see all your dominion:\n\n" player-name univ-name))
+  (print-stats)
+  (widget-insert 
+"From here you can visit different offices to control
+different aspects of the university:
+
+")
   (setq main-finance (widget-create 'push-button
                                          :notify (lambda (&rest ignore)
                                                    (cleanup-main)
@@ -119,13 +152,19 @@ From here you can see all your dominion:\n\n" player-name univ-name))
                                                   (cleanup-main)
                                                   (career-screen))
                                         "Career Center"))
-  (widget-setup))
+  (widget-insert
+"
 
-(defvar interest 5)
-(defconst tuition-amt 3)
-(defconst finaid-amt 1)
-(defvar endowment 100)
-(defvar enrollment 200)
+  When you're done, it's time to
+
+")
+  (setq main-advance (widget-create 'push-button
+                                    :notify (lambda (&rest ignore)
+                                              (cleanup-main)
+                                              (advance-year)
+                                              (main-screen))
+                                    "Advance to Next Year"))
+  (setup-screen))
 
 (defun finance-interest-income ()
   (/ (* endowment interest) 100))
@@ -134,7 +173,12 @@ From here you can see all your dominion:\n\n" player-name univ-name))
   (* enrollment (- tuition-amt finaid-amt)))
 
 (defun finance-income ()
+  "Income from all sources, after accounting for financial aid"
   (+ (finance-interest-income) (finance-tuition-income)))
+
+(defun finance-profit ()
+  "Income less expenses"
+  (finance-income))
 
 
 (defvar finance-tuition)
@@ -150,6 +194,7 @@ From here you can see all your dominion:\n\n" player-name univ-name))
 (defun finance-screen ()
   "The bursar's office where you can manage your endowment"
   (force-erase-buffer)
+  (print-stats)
   (widget-insert (format "Endowment: %dK\n" endowment))
   (widget-insert (format "Interest rate: %d%%\n" interest))
   (widget-insert (format "Income from interest: %dK\n\n" (finance-interest-income)))
@@ -179,4 +224,4 @@ From here you can see all your dominion:\n\n" player-name univ-name))
                            (finish-finance)
                            (main-screen))
                  "Done!")
-  (widget-setup))
+  (setup-screen))
