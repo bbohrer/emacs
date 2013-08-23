@@ -13,12 +13,14 @@
 (defvar endowment)
 (defvar enrollment)
 
+;; Separate defvar and setq so we restore the original value each time
+;; we restart the game.
 (setq year 1900)
 (setq prestige 0)
 (setq tuition-amt 3)
 (setq finaid-amt 1)
 (setq endowment 100)
-(setq enrollment 200)
+(setq enrollment 160)
 
 (defun simu ()
   "Play SimU"
@@ -33,8 +35,8 @@
   (widget-beginning-of-line))
 
 (defun print-stats ()
-  (widget-insert (propertize (format "  Year: %d      Endowment: $%dK     Prestige: %d\n"
-                                     year endowment prestige)
+  (widget-insert (propertize (format "  Year: %d      Endowment: $%dK     Enrollment: %d     Prestige: %d\n"
+                                     year endowment enrollment prestige)
                              'font-lock-face 
                              '(:foreground "white" :background "black")))
   (widget-insert "\n"))
@@ -50,7 +52,7 @@
 (defun start-screen ()
   "Draw the start screen and respond to user input"
   (force-erase-buffer)
-  (remove-overlays)
+        (remove-overlays)
   (use-local-map widget-keymap)
   (widget-insert 
 "***********       Welcome to SimU       ***********\n
@@ -100,7 +102,10 @@ private school, or burgeoning state school.
 
 (defun advance-year ()
   (setq endowment (+ endowment (finance-profit)))
-  (setq year (1+ year)))
+  (setq year (1+ year))
+  ;; 1 class graduates, we get some more from admissions
+  (setq enrollment (round (+ (* .75 enrollment) (admissions-enrolling))))
+  (setq student-iq (admissions-iq)))
 
 (defun main-screen ()
   "Primary game screen - allows selecting between other screens"
@@ -211,6 +216,29 @@ different aspects of the university:
                               (number-to-string finaid-amt)))
   (widget-insert "\n")
   (widget-insert (format "Net income from tuition: $%dK\n" (finance-tuition-income)))
+  (widget-insert (format "Total net income: $%dK\n\n" (finance-income))))
+
+
+(defun finance-screen ()
+  "The bursar's office where you can manage your endowment"
+  (force-erase-buffer)
+  (print-stats)
+  (widget-insert (format "Endowment: %dK\n" endowment))
+  (widget-insert (format "Interest rate: %d%%\n" interest))
+  (widget-insert (format "Income from interest: %dK\n\n" (finance-interest-income)))
+  (widget-insert (format "Enrollment: %d students\n" enrollment))
+  (setq finance-tuition (widget-create 'editable-field
+                                :size 3
+                                :format "Tuition: $%vK"
+                                (number-to-string tuition-amt)
+                                ))
+  (widget-insert "\n")
+  (setq finance-finaid (widget-create 'editable-field
+                              :size 3  
+                              :format "Average financial aid: $%vK"
+                              (number-to-string finaid-amt)))
+  (widget-insert "\n")
+  (widget-insert (format "Net income from tuition: $%dK\n" (finance-tuition-income)))
   (widget-insert (format "Total net income: $%dK\n\n" (finance-income)))
 
   (widget-create 'push-button
@@ -222,6 +250,94 @@ different aspects of the university:
   (widget-create 'push-button
                  :notify (lambda (&rest ignore)
                            (finish-finance)
+                           (main-screen))
+                 "Done!")
+  (setup-screen))
+
+(defvar students-accepted)
+(defvar admissions-counselors)
+(defvar admissions-scholarships)
+(defvar student-iq)
+(defconst counselor-cost 40)
+(defconst scholarship-cost 10)
+(defconst base-applicants 200)
+
+(setq students-accepted base-applicants)
+(setq admissions-counselors 0)
+(setq admissions-scholarships 0)
+(setq student-iq 80)
+
+(defun admissions-applicants ()
+  (let ((prestige-factor (exp (/ prestige 100))))
+    (* base-applicants prestige-factor)))
+
+(defun admissions-enrolling ()
+  (let* ((counselor-weight 3)
+         (scholarship-weight 1)
+         (flake-rate (max 0 (- 80 (+ (* admissions-counselors counselor-weight)
+                                     (* admissions-scholarships scholarship-weight))))))
+    (/ (* students-accepted (- 100 flake-rate)) 100)))
+
+(defun admissions-iq ()
+  ;; cheap trick for calculating IQ: subtract acceptance rate from max IQ. If you accept
+  ;; everyone, you get ~70 which is pretty dumb. Note you can also accept more than everyone
+  ;; which should have no additional effect
+  (let ((max-iq 170))
+    (- max-iq (/ (* 100 (min students-accepted (admissions-applicants))) 
+                 (admissions-applicants)))))
+
+
+(defun buy-counselor ()
+  (if (> endowment counselor-cost)
+      (progn (setq admissions-counselors (1+ admissions-counselors))
+             (setq endowment (- endowment counselor-cost)))))
+
+(defun buy-scholarship ()
+  (if (> endowment scholarship-cost)
+      (progn
+        (setq admissions-scholarships (1+ admissions-scholarships))
+        (setq endowment (- endowment scholarship-cost)))))
+
+(defun finish-admissions ()
+  (setq students-accepted (string-to-number (widget-value admissions-accept)))
+  (widget-delete admissions-accept)
+  (widget-delete admissions-hire)
+  (widget-delete admissions-scholarship))
+
+(defun admissions-screen ()
+  (force-erase-buffer)
+  (print-stats)
+  (setq admissions-hire (widget-create 'push-button
+                 :format (concat "%[[Hire Admissions Counselor]%]" 
+                                 (format " ($%dK)" counselor-cost))
+                 :notify (lambda (&rest ignore)
+                           (buy-counselor)
+                           (finish-admissions)
+                           (admissions-screen))))
+  (spacer)
+  (setq admissions-scholarship (widget-create 'push-button
+                 :format (concat "%[[Create Merit-Based Scholarship]%]" 
+                                 (format " ($%dK)" scholarship-cost))
+                 :notify (lambda (&rest ignore) 
+                           (buy-scholarship)
+                           (finish-admissions)
+                           (admissions-screen))))
+  (spacer)
+  (widget-insert (format "Estimated applicants: %d\n\n" (admissions-applicants)))
+  (setq admissions-accept (widget-create 'editable-field
+                 :size 10
+                 :format "Max # Accepted: %v \n\n"  
+                 (number-to-string students-accepted)))
+  (widget-insert (format "Estimated enrolling: %d\n\n" (admissions-enrolling)))
+  (widget-insert (format "Estimated avg. student I.Q.: %d \n\n" (admissions-iq)))
+  (widget-create 'push-button
+                 :notify (lambda (&rest ignore)
+                           (finish-admissions)
+                           (admissions-screen))
+                 "Recalculate")
+  (widget-insert " ")  (widget-create 'push-button
+                 :notify (lambda (&rest ignore)
+                           (finish-admissions)
                            (main-screen))
                  "Done!")
   (setup-screen))

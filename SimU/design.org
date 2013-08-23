@@ -90,7 +90,6 @@ corresponds to one building/office.
 ** Admissions
 Here you can view the number of applicants, which is a function of prestige, tuition and 
 financial aid. I don't know the exact function yet. Maybe something like:
-
 (prestige - (tuition - avg. fin. aid))^ 2
 
 Once you have the number of applicants you can set the admit rate to get the number of
@@ -198,4 +197,5 @@ Now we can start focusing on depth more so go ahead and add the more complicated
 
 ** Career Center
 These are both somewhat tangential features so they can wait a bit.
+
 ** Sports
