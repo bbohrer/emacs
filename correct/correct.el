@@ -1,3 +1,4 @@
+
 (require 'cl)
 (defun memo-table (n m)
   (let ((memo (make-vector n nil)))
@@ -25,3 +26,20 @@
 
 (levenshtein "scattergory" "category")
 
+
+(defun pairs (L) "All pairs of consecutive elements in L"
+  (if (null L)
+      nil
+    (if (null (cdr L))
+        nil
+      (cons (cons (car L) (cadr L)) (pairs (cdr L))))))
+
+(defun markov-rules (corpus rule-count)
+  "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
+   previous word. Returns rules as a list of triples (prev, next, p) that say 'If the
+   previous word was PREV, predict NEXT with confidence P'."
+  (let* ((words (split-string corpus))
+         (pair-list (pairs words))
+         (counts (do-count pair-list (make-hash-table :test 'equal)))
+         (freqs (freq-of-count counts)))
+    (take (sort-by-freq freqs) rule-count)))
