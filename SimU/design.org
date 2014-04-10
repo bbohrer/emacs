@@ -1,5 +1,6 @@
-I feel like writing a university simulation game. I also feel like learning emacs lisp.
-Therefore I feel like writing a university simulation game in emacs lisp.
+I feel like writing a university simulation game. I also feel like
+learning emacs lisp.  Therefore I feel like writing a university
+simulation game in emacs lisp.
 
 * Vague list of interesting things to simulate
 ** Admissions
@@ -30,7 +31,7 @@ Major expenses are:
  - Dining
 
 ** Enrollment
-The current total number of students. Has a major effect on endowment since this is 
+The current total number of students. Has a major effect on endowment since this is
 the number of people giving you moneys. You also need to house/feed most (not all) of these
 people and keep an eye on the number of professors (see class size).
 
@@ -88,7 +89,7 @@ corresponds to one building/office.
 (P.R. is not budgeted - not a recurring expense)
 
 ** Admissions
-Here you can view the number of applicants, which is a function of prestige, tuition and 
+Here you can view the number of applicants, which is a function of prestige, tuition and
 financial aid. I don't know the exact function yet. Maybe something like:
 (prestige - (tuition - avg. fin. aid))^ 2
 
@@ -101,7 +102,7 @@ same factors as # applicants.
 If you admit more students than you have housing for, they have to live somewhere else and
 Student Life quality (and possibly Prestige!!) drops off.
 
-You can hire admissions counselors or buy merit-based scholarships to increase student 
+You can hire admissions counselors or buy merit-based scholarships to increase student
 quality without affecting class size (not sure this actually adds anything to the mechanics).
 
 ** Housing
