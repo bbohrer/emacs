@@ -1,4 +1,4 @@
-(load "~/private/emacs/correct/bible")
+(load "~/private/emacs/correct/wiki")
 (require 'cl)
 (defun memo-table (n m)
   (let ((memo (make-vector n nil)))

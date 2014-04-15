@@ -1,0 +1,163 @@
+\documentclass[12pt]{article}
+
+\begin{document}
+\begin{center}
+  15-859 Final Project: ML Auto-Correct\\ Brandon Bohrer
+\end{center}
+\section{Problem}
+The goal of this project is to apply machine learning techniques to
+build an text correction algorithm. We model text correction as an
+online classification problem: Given a context $C$ of the most
+recently typed word(s) and a candidate word $w$, output a word $w'$
+which is our best guess at the intended word. One thing that makes
+this problem interesting is that there exist very different ways
+predicting the next word, and it is not obvious how best to combine
+them into a prediction.  Another interesting aspect is that the
+problem is user-dependent: We want to learn what word a particular
+person is most likely to have meant.  This means a good solution must
+be able to adapt itself to different users, and as a side-effect we
+can learn things about our user based on which techniques worked well
+for them.
+
+\section{Approach}
+We really have several problems to solve: first we must predict words,
+secondly we must combine predictions.
+
+\subsection{Nearest-Neighbor Prediction}
+The first (and probably most accurate) algorithm I used is
+nearest-neighbor. Every string input by the user is an example and
+every valid word is a label. I use Levenshtein distance as the
+distance metric and output the closest word. While I could generalize
+this to $k$-nearest-neighbors, it seems unlikely that the additional
+neighbors would matter much in text prediction.
+
+This approach is surpisingly flexible: the flexibility comes from the
+choice of distance metric. Levenshtein makes it easy to assign custom
+costs to deleting or substituting specific characters. This allows me
+to customize the autocorrect to the user in two ways:
+\begin{itemize}
+\item Different users use different keyboard layouts. When you make a
+  typo, you are most likely to hit a key adjacent to the one you
+  intended. Since that typo is common, it should be treated as cheap
+  in the distance metric so we prefer predictions that make that
+  substition over ones that don't.  I made the cost of a substitution
+  directly proprotional to the Manhattan distance between them on the
+  keyboard. Because it's common to hit or miss the Shift key, we can
+  treat the presence of the Shift key as another step of Manhattan
+  distance in the metric.
+\item Sometimes a key on your keyboard will malfunction. Maybe it
+  won't type at all or is just more difficult to type than other
+  keys. We can model this situation by making it cheap or free
+  (depending on how bad the key is) to delete that character.  In
+  particular, the 's' key on my keyboard has been a bit problematic
+  (but not completely broken) lately --- it will be interesting to see
+  if a predictor that assumes 's' is broken performs better or not.
+\end{itemize}
+
+Another important parameter for this predictor is the dictionary we
+use as our set of valid words.  Nearest-neighbor is based on the
+assumption that the correctness of a word is context-free: if a word
+is valid in any context, we never want to correct it to anything
+else. This is not necessarily true. Say we have two words $w$ and $w'$
+that are close to each other. $w$ is extremely common and $w'$ is
+extremely rare. We may want to omit $w'$ from the dictionary because
+it is more likely to be a typo than a legitimate word. (on the other
+hand, Swype likes to correct me when I type real words, and it's very
+frustrating).
+
+Since this algorithm is online, the user will naturally build up their
+own dictionary over time, containing all the words that are valid in
+the text they write. The point of supplying an initial dictionary is
+that otherwise the predictions would be absolutely terrible until the
+user builds a good dictionary, which may take a long time.  Part of
+the art of this project is picking a good starting dictionary. I
+predict a 15K most-common list will work well (language learners
+consider 15K words enough that you understand most things you read).
+
+\subsection{$k$-grams Prediction}
+My second predictor looks at the previous words (completely ignoring
+the current word) and chooses the word that follows them most often in
+the training data. Several variations are possible. We can vary
+$k$. We could also predict the word probabalistically based on how
+often it follows the previous words, in which case the predictor
+functions as a Markov chain. Perhaps most usefully, we can make this a
+``sleeping expert'': If it's hard to predict the next word based on
+the current word, we don't predict anything at all.
+
+We can think of this as approximating having a huge number of rules
+that say ``if the last word was $w$, output $w'$''. It's just that we
+have so many words, running Weighted Majority with those rules could
+be quite slow. By combining them all into a single predictor, we lose
+the flexibility to tell good rules from bad ones, but if the text is
+somewhat randomly distributed, the quality of a rule should be
+directly proportional to how often we saw the word, so we probably
+don't lose much.
+
+Much like the previous predictor, this one is online and can be
+learned tuned from just the user's input. Because it takes a long time
+to gather enough data, we can also pre-train with a corpus of
+text. The choice of corpus is perhaps even more important here,
+because different authors have very different writing styles. In the
+online setting we have the problem of how heavily to weight text
+entered by the user vs. text drawn from a corpus (a naive
+implementation weights the corpus highly because it has vastly more
+data in it, but the user's input should probably matter more). One
+solution is to keep one predictor that is completely offline and
+another that is completely online.
+
+\subsection{Combining Predictions}
+I use the Moving Weighted Majority algorithm to combine predictions
+from these predictors. I use the ``Moving'' version because some of
+the training happens online, and if the online predictors get better
+over time, they need to be able to catch up. Similarly, if I break my
+key suddenly, the broken key predictor needs to start doing well.
+
+Weighted Majority seems suboptimal for this task, because each expert
+is only allowed to make one prediction, but really both predictors
+should be able to make multiple guesses: the $k$-gram predictor knows
+all the words that might follow a given word and the nearest-neighbor
+predictor knows all the nearby neighbors, not just the nearest. It
+seems especially relevant since there are a very large number of
+possible labels and it seems likely that a predictor will get the
+right answer as its 2nd or 3rd guess.  However, it's not obvious how
+to make Weighted Majority work well with multiple guesses and the
+result is probably slower, so I'm unlikely to solve this.
+
+\section{Implementation}
+My implementation is written in Emacs Lisp. This is probably the only
+such project in the history of the class. If it goes well, I want to
+write an Emacs mode so I can use my autocorrect in everyday
+typing. This possibility makes Emacs Lisp a much more useful
+implementation language for me than anything else. However, it has
+some implications: Emacs Lisp is a pretty slow language (though not
+the worst), which means I can't have quite as many predictors as I
+could with a faster language. In particular, the ``broken keys''
+feature introduces a branching factor of about 45, so I will most
+likely have to investigate that feature separately from considering
+different choices of corpus/word list. I also can't realistically
+build a Markov chain on a multi-gigabyte document in Emacs, so my
+training corpora are at most a few hundred thousand words.
+\section{Data}
+{\bf Keyboard Layouts:} I only look at Qwerty and Dvorak, both because
+they are the most common and to avoid a combinatorial explosion when
+combined with the other variables.;
+
+{\bf Word Lists:} My first choice is the 15K word list at
+\\\verb|http://www.audiencedialogue.net/susteng.html| because it
+represents ``common english words''. I can also use the Wiktionary
+word lists:
+\\\verb|http://simple.wiktionary.org/wiki/Wiktionary:BNC_spoken_freq_01|
+which are based on the BNC (British National Corpus) and might show a
+contrast between American/British English
+
+{\bf Corpora:} The first corpus I chose was the King James Bible
+acquired from \verb|http://printkjv.ifbweb.com/| because Biblical
+English is so different from modern English and I thought the contrast
+could be interesting.  I used you plain-text lecture notes as another
+corpus because every technical field also speaks in a very specific
+way.  Since both of these texts are very idiomatic, I wanted a more
+general example of written English, so I mashed the ``Random Article''
+button on Wikipedia for a while, then pasted all the results into a
+text file. Of course I had to do some postprocessing to remove
+non-textual elements.
+\end{document}
