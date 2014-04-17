@@ -1,4 +1,8 @@
-(load "~/private/emacs/correct/wiki")
+;;(load "~/private/emacs/correct/wiki")
+;;(load "~/private/emacs/correct/bnc15k")
+(load "~/Documents/emacs/correct/wiki")
+(load "~/Documents/emacs/correct/bnc1k")
+
 (require 'cl)
 (defun memo-table (n m)
   (let ((memo (make-vector n nil)))
@@ -8,23 +12,92 @@
 
 (defun levenshtein (s1 s2)
   (let ((memo (memo-table (length s1) (length s2))))
-    (flet ((lev (i j)
-                (let ((stored (aref (aref memo i) j)))
-                  (if stored
-                      stored
-                    (let ((res (if (= (min i j) 0)
-                                   (max i j)
-                                 (min (+ 1 (lev (- i 1) j))
+    (cl-flet ((lev (i j)
+                (if (= (min i j) -1)
+                    (+ 1 (max i j))
+                  (let ((stored (aref (aref memo i) j)))
+                    (if stored
+                        stored
+                      (let ((res (min (+ 1 (lev (- i 1) j))
                                       (+ 1 (lev i (- j 1)))
                                       (+ (lev (- i 1) (- j 1))
                                          (if (= (aref s1 i) (aref s2 j))
                                              0
-                                           1))))))
-                      (aset (aref memo i) j res)
-                      res)))))
-          (lev (- (length s1) 1) (- (length s2) 1)))))
+                                           1)))))
+                        (aset (aref memo i) j res)
+                        res))))))
+      (lev (- (length s1) 1) (- (length s2) 1)))))
 
-(levenshtein "scattergory" "category")
+
+(defun build-lev-dict (words)
+  "Given a list of strings, builds an initial dictionary (word) -> (label, distance)
+   mapping input words to their corrected word and the distance to it"
+  (let ((lev-dict (make-hash-table :test 'equal)))
+    (while (not (null words))
+      (puthash (car words) (cons (car words) 0) lev-dict)
+      (setq words (cdr words)))
+    lev-dict))
+(defun safe-sort (L f) (sort (copy-list L) f))
+
+(defun init-lev (words)
+  (let ((mywords (safe-sort words (function string<))))
+    (cons (build-lev-dict mywords) mywords)))
+
+(defun predict-lev (state candidate)
+  "Given a candidate value, predicts a correction
+   based on some state, returning (prediction, dist)"
+  (let* ((dict (car state))
+        (words (cdr state))
+        (best-word candidate)
+        (best-dist 9999999)
+        (cached-answer (gethash candidate dict)))
+    (if cached-answer
+        cached-answer
+      (while (not (null words))
+        (let* ((word (car words))
+               (dist (levenshtein candidate word)))
+          (if (< dist best-dist)
+              (progn
+                (setq best-dist dist)
+                (setq best-word word))))
+      (setq words (cdr words)))
+      (cons best-word best-dist))))
+
+(defun add-to-words (word words)
+  (cond ((null words) (cons word nil))
+        ((string< word (car words)) (cons word words))
+        (let ((iter words))
+          (while (not (null (cdr iter)))
+            (cond ((string= (cadr iter) word)
+                   (setq iter nil))
+                  ((string< (cadr iter) word)
+                   (progn (setcdr iter (cons word (cdr iter)))
+                          (setq iter nil)))
+                   (setq iter (cdr iter))))
+          words)))
+
+(defun update-state (state label pred-word)
+  (let ((dict (car state))
+        (words (cdr state)))
+    (if (string= label pred-word)
+        state
+      (puthash example (cons pred-word (levenshtein label pred-word)) dict)
+      (cons dict
+            (add-to-words label words)))))
+(string< "a" "b")
+(defun learn-word (state example label)
+  "Predicts the correction for example, then learns it if the guess was wrong"
+  (let* ((prediction (predict-lev state example))
+         (pred-word (car prediction))
+         (pred-dist (cdr prediction)))
+    (cons pred-word (update-state state label pred-word))))
+
+(setq test-lev (init-lev dict))
+(setq result (predict-lev test-lev "thery"))
+(setq test-lev (cdr (learn-word test-lev "monad" "monad")))
+"hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
+machines leaning machine learning theory"
+
 
 
 (defun pairs-t (L acc) "All pairs of consecutive elements in L"
@@ -77,7 +150,7 @@
     freq-list))
 
 (defun sort-by-freq (rules)
-  (sort rules (lambda (rule1 rule2) (> (car (cddr rule1)) (car (cddr rule2))))))
+  (safe-sort rules (lambda (rule1 rule2) (> (car (cddr rule1)) (car (cddr rule2))))))
 
 (defun take-t (L n acc)
   (if (< n 1) acc
@@ -101,7 +174,3 @@
          (counts (do-count pair-list (make-hash-table :test 'equal)))
          (freqs (freq-of-count counts)))
     (take (sort-by-freq freqs) rule-count)))
-
-(setq kgrams (markov-rules "sup dawg yo mang" 1000))
-
-(nth 800 kgrams)
