@@ -2,8 +2,77 @@
 ;;(load "~/private/emacs/correct/bnc15k")
 (load "~/Documents/emacs/correct/wiki")
 (load "~/Documents/emacs/correct/bnc1k")
-
 (require 'cl)
+
+(defun cadar (x) (car (cdr (car x))))
+
+; Keyboard layouts - each layout is a list of rows, each of which is a list of pairs of characters on the same key.
+;
+; Layout for (programmer) Dvorak
+(setq dvorak-keys  '(
+((?\$ ?\~) (?\& ?\%)  (?\[ ?7)  (?\{ ?5) (?\} ?3) (?\( ?1) (?\= ?9) (?\* ?0) (?\) ?2) (?\+ ?4) (?\] ?6) (?\! ?8)  (?\# ?\`))
+((?\; ?\:) (?\, ?\<) (?\. ?\>) (?p ?P)  (?y ?Y)  (?f ?F)  (?g ?G)  (?c ?C)  (?r ?R)  (?l ?L)  (?\/ ?\?) (?\@ ?^)  (?\\ ?\|))
+((?a ?A)   (?o ?O)   (?e ?E)   (?u ?U)  (?i ?I)  (?d ?D)  (?h ?H)  (?t ?T)  (?n ?N)  (?s ?S)  (?\- ?\_))
+((?\' ?\") (?q ?Q)   (?j ?J)   (?k ?K)  (?x ?X)  (?b ?B)  (?m ?M)  (?w ?W)  (?v ?V)  (?z ?Z))
+))
+
+(setq all-keys
+ '(?\$ ?\& ?\[ ?\{ ?\} ?\( ?\= ?\* ?\) ?\+ ?\] ?\! ?\# ?\; ?\, ?\. ?\/ ?\@ ?\\
+   ?\' ?\~ ?\% ?\` ?\? ?^ ?\| ?\: ?\< ?\> ?\" ?7 ?5 ?3 ?1 ?9 ?0 ?2 ?4 ?6 ?8 ?p
+   ?y ?g ?f ?c ?r ?l ?a ?o ?e ?u ?i ?d ?h ?t ?n ?s ?j ?k ?x ?b ?m ?w ?v
+   ?z ?P ?Y ?F ?G ?C ?R ?L ?O ?A ?E ?U ?I ?D ?H ?T
+   ?N ?S ?Q ?J ?K ?X ?B ?M ?W ?V ?Z))
+
+;; Greatest manhattan distance between any two keys
+(setq max-dist 15)
+
+(defun char-pos (table char)
+  (let ((x 0) (y 0) (done nil))
+    (while (not (or done (null table)))
+      (let ((row (car table)))
+        (while (not (or done (null row)))
+          (if (or (= char (caar row))
+                  (= char (cadar row)))
+              (setq done t)
+            (setq x (+ x 1)))
+          (setq row (cdr row))))
+      (if (not done)
+          (progn
+            (setq x 0)
+            (setq y (+ y 1))))
+      (setq table (cdr table)))
+    (if done
+        (cons x y)
+      nil)))
+
+(defun key-dist (table key1 key2)
+  (let* ((pos1 (char-pos table key1))
+         (pos2 (char-pos table key2)))
+    (if (null pos2) (/ key2 0))
+    (/ (float (+ (abs (- (car pos1) (car pos2)))
+                 (abs (- (cdr pos1) (cdr pos2)))))
+       (float max-dist))))
+
+(defun dist-map (table)
+  (let ((keys1 all-keys)
+        (key-map (make-char-table 'key-map)))
+    (while (not (null keys1))
+      (let ((keys2 all-keys)
+            (inner-table (make-char-table 'key-map)))
+        (while (not (null keys2))
+          (aset inner-table (car keys2) (key-dist table (car keys1) (car keys2)))
+          (setq keys2 (cdr keys2)))
+        (aset key-map (car keys1) inner-table)
+        (setq keys1 (car keys1))
+        (setq keys2 all-keys)))
+    key-map))
+
+(key-dist dvorak-keys ?\' ?\#)
+(char-pos dvorak-keys ?\Q)
+(char-pos dvorak-keys 5)
+(dist-map dvorak-keys)
+
+
 (defun memo-table (n m)
   (let ((memo (make-vector n nil)))
     (dotimes (i n)
