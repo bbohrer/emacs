@@ -1,7 +1,7 @@
-;;(load "~/private/emacs/correct/wiki")
-;;(load "~/private/emacs/correct/bnc15k")
-(load "~/Documents/emacs/correct/wiki")
-(load "~/Documents/emacs/correct/bnc1k")
+(load "~/private/emacs/correct/wiki")
+(load "~/private/emacs/correct/bnc1k")
+;(load "~/Documents/emacs/correct/wiki")
+;(load "~/Documents/emacs/correct/bnc1k")
 (require 'cl)
 
 (defun cadar (x) (car (cdr (car x))))
@@ -19,7 +19,7 @@
 (setq all-keys
  '(?\$ ?\& ?\[ ?\{ ?\} ?\( ?\= ?\* ?\) ?\+ ?\] ?\! ?\# ?\; ?\, ?\. ?\/ ?\@ ?\\
    ?\' ?\~ ?\% ?\` ?\? ?^ ?\| ?\: ?\< ?\> ?\" ?7 ?5 ?3 ?1 ?9 ?0 ?2 ?4 ?6 ?8 ?p
-   ?y ?g ?f ?c ?r ?l ?a ?o ?e ?u ?i ?d ?h ?t ?n ?s ?j ?k ?x ?b ?m ?w ?v
+   ?y ?g ?f ?c ?r ?l ?a ?o ?e ?u ?i ?d ?h ?t ?n ?s ?q ?j ?k ?x ?b ?m ?w ?v
    ?z ?P ?Y ?F ?G ?C ?R ?L ?O ?A ?E ?U ?I ?D ?H ?T
    ?N ?S ?Q ?J ?K ?X ?B ?M ?W ?V ?Z))
 
@@ -88,20 +88,27 @@
       (aset memo i (make-vector m nil)))
     memo))
 
-(defun levenshtein (s1 s2)
+(defun drop-cost (subst c)
+  (if (aref subst c)
+      (aref subst c)
+    (/ c 0)))
+(defun dist-cost (dist d1 d2)
+  (aref (aref dist d1) d2))
+(defun levenshtein (dist subst s1 s2)
   (let ((memo (memo-table (length s1) (length s2))))
-    (cl-flet ((lev (i j)
+    (flet ((lev (i j)
                 (if (= (min i j) -1)
+                    ;; Need to account for cost of dropping characters, don't care yet
                     (+ 1 (max i j))
                   (let ((stored (aref (aref memo i) j)))
                     (if stored
                         stored
-                      (let ((res (min (+ 1 (lev (- i 1) j))
-                                      (+ 1 (lev i (- j 1)))
-                                      (+ (lev (- i 1) (- j 1))
-                                         (if (= (aref s1 i) (aref s2 j))
-                                             0
-                                           1)))))
+                      (let* ((c1 (aref s1 i))
+                             (c2 (aref s2 j))
+                             (res (min (+ (drop-cost subst c1) (lev (- i 1) j))
+                                       (+ (drop-cost subst c2) (lev i (- j 1)))
+                                       (+ (lev (- i 1) (- j 1))
+                                          (dist-cost dist c1 c2)))))
                         (aset (aref memo i) j res)
                         res))))))
       (lev (- (length s1) 1) (- (length s2) 1)))))
@@ -115,30 +122,34 @@
       (puthash (car words) (cons (car words) 0) lev-dict)
       (setq words (cdr words)))
     lev-dict))
-(defun safe-sort (L f) (sort (copy-list L) f))
+(defun safe-sort (L f) (sort (copy-sequence L) f))
 
-(defun init-lev (words)
+(defun init-lev (keys char words)
   (let ((mywords (safe-sort words (function string<))))
-    (cons (build-lev-dict mywords) mywords)))
+    (cons
+     (cons (dist-map keys) (subst-map char))
+     (cons (build-lev-dict mywords) mywords))))
 
 (defun predict-lev (state candidate)
   "Given a candidate value, predicts a correction
    based on some state, returning (prediction, dist)"
-  (let* ((dict (car state))
-        (words (cdr state))
-        (best-word candidate)
-        (best-dist 9999999)
-        (cached-answer (gethash candidate dict)))
+  (let* ((dist (caar state))
+         (subst (cdar state))
+         (dict (cadr state))
+         (words (cddr state))
+         (best-word candidate)
+         (best-dist 9999999)
+         (cached-answer (gethash candidate dict)))
     (if cached-answer
         cached-answer
       (while (not (null words))
         (let* ((word (car words))
-               (dist (levenshtein candidate word)))
+               (dist (levenshtein dist subst candidate word)))
           (if (< dist best-dist)
               (progn
                 (setq best-dist dist)
                 (setq best-word word))))
-      (setq words (cdr words)))
+        (setq words (cdr words)))
       (cons best-word best-dist))))
 
 (defun add-to-words (word words)
@@ -155,14 +166,15 @@
           words)))
 
 (defun update-state (state label pred-word)
-  (let ((dict (car state))
-        (words (cdr state)))
+  (let ((dict (cadr state))
+        (words (cddr state)))
     (if (string= label pred-word)
         state
-      (puthash example (cons pred-word (levenshtein label pred-word)) dict)
-      (cons dict
-            (add-to-words label words)))))
-(string< "a" "b")
+      (puthash example (cons pred-word (levenshtein (caar state) (cdar state) label pred-word)) dict)
+      (cons (car state)
+            (cons dict
+                  (add-to-words label words))))))
+
 (defun learn-word (state example label)
   "Predicts the correction for example, then learns it if the guess was wrong"
   (let* ((prediction (predict-lev state example))
@@ -170,7 +182,7 @@
          (pred-dist (cdr prediction)))
     (cons pred-word (update-state state label pred-word))))
 
-(setq test-lev (init-lev dict))
+(setq test-lev (init-lev dvorak-keys -1 dict))
 (setq result (predict-lev test-lev "thery"))
 (setq test-lev (cdr (learn-word test-lev "monad" "monad")))
 "hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
