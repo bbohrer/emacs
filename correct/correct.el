@@ -63,9 +63,18 @@
           (aset inner-table (car keys2) (key-dist table (car keys1) (car keys2)))
           (setq keys2 (cdr keys2)))
         (aset key-map (car keys1) inner-table)
-        (setq keys1 (car keys1))
+        (setq keys1 (cdr keys1))
         (setq keys2 all-keys)))
     key-map))
+
+(defun subst-map (char)
+  (let ((chars all-keys)
+        (table (make-char-table 'subst-map)))
+    (while (not (null chars))
+      (aset table (car chars) (if (= (car chars) char) 0 1))
+      (setq chars (cdr chars)))
+    table))
+
 
 (key-dist dvorak-keys ?\' ?\#)
 (char-pos dvorak-keys ?\Q)
