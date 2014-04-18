@@ -82,13 +82,6 @@
       (setq chars (cdr chars)))
     table))
 
-
-(key-dist dvorak-keys ?\' ?\#)
-(char-pos dvorak-keys ?\Q)
-(char-pos dvorak-keys 5)
-(dist-map dvorak-keys)
-
-
 (defun memo-table (n m)
   (let ((memo (make-vector n nil)))
     (dotimes (i n)
@@ -160,6 +153,40 @@
         (setq words (cdr words)))
       (cons best-word best-dist))))
 
+(defun predict-combo (p candidate)
+  (let* ((state (car p))
+         (chain (cdr p))
+         (dist (caar state))
+         (subst (cdar state))
+         (dict (cadr state))
+         (words (cddr state))
+         (best-word candidate)
+         (best-dist 9999999)
+         (cached-answer (gethash candidate dict)))
+    (if cached-answer
+        cached-answer
+      (while (not (null words))
+        (let* ((word (car words))
+               (lev-dist (levenshtein dist subst candidate word))
+               (p (chain-prob chain candidate))
+               (adj-dist (* (- 1.0 p) lev-dist)))
+          (if (< adj-dist best-dist)
+              (progn
+                (setq best-dist adj-dist)
+                (setq best-word word))))
+          (setq words (cdr words)))
+      (cons best-word best-dist))))
+
+(defun chain-prob (chain input)
+  (let* ((prev (car chain))
+         (table (cdr chain))
+         (next (if (null prev) 0.0
+                 (if (null (gethash prev table))
+                     0.0
+                   (gethash input (gethash prev table))))))
+    (setcar chain input)
+    next))
+
 (defun add-to-words (word words)
   (cond ((null words) (cons word nil))
         ((string< word (car words)) (cons word words))
@@ -225,19 +252,11 @@
   (maphash
    (lambda (prev count-prevhash)
      (maphash (lambda (next next-count)
-                (puthash next (cons next-count (/ (float next-count) (float (car count-prevhash)))) (cdr count-prevhash)))
+                (puthash next (/ (float next-count) (float (car count-prevhash))) (cdr count-prevhash)))
               (cdr count-prevhash))
      (puthash prev (cdr count-prevhash) hash))
    hash)
-  (let ((freq-list nil))
-    (maphash
-     (lambda (prev nexthash)
-       (maphash
-        (lambda (next freq)
-          (setq freq-list (cons (cons prev (cons next freq)) freq-list)))
-        nexthash))
-     hash)
-    freq-list))
+  hash)
 
 (defun best-of-hash (hash)
   (maphash
@@ -262,15 +281,21 @@
          (counts (do-count pair-list (make-hash-table :test 'equal))))
     (best-of-hash counts)))
 
-(defun markov-rules (corpus rule-count)
-  "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
-   previous word. Returns rules as a list of triples (prev, next, p) that say 'If the
-   previous word was PREV, predict NEXT with confidence P'."
+(defun build-markov-full (corpus)
   (let* ((words (split-string corpus))
          (pair-list (pairs words))
-         (counts (do-count pair-list (make-hash-table :test 'equal)))
-         (freqs (freq-of-count counts)))
-    (take (sort-by-freq freqs) rule-count)))
+         (counts (do-count pair-list (make-hash-table :test 'equal))))
+    (freq-of-count counts)))
+
+;; (defun markov-rules (corpus rule-count)
+;;   "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
+;;    previous word. Returns rules as a list of triples (prev, next, p) that say 'If the
+;;    previous word was PREV, predict NEXT with confidence P'."
+;;   (let* ((words (split-string corpus))
+;;          (pair-list (pairs words))
+;;          (counts (do-count pair-list (make-hash-table :test 'equal)))
+;;          (freqs (freq-of-count counts)))
+;;     (take (sort-by-freq freqs) rule-count)))
 
 (defun take-t (L n acc)
   (if (< n 1) acc
@@ -288,15 +313,25 @@
   (cons 'lev state))
 
 (defun mk-pred-markov (state)
-  (cons 'markov state))
+  (cons 'markov (cons nil state)))
+
+(defun mk-pred-combo (state chain)
+  (cons 'combo (cons state (cons nil chain))))
 
 (defun predict-markov (p input)
-  (gethash input p))
+  (let* ((prev (car p))
+         (table (cdr p))
+         (next (if (or (null prev) (null (gethash prev table)))
+                   input (gethash prev table))))
+    (setcar p input)
+    next))
 
 (defun predict (predictor input)
   (if (eq (car predictor) 'lev)
       (car (predict-lev (cdr predictor) input))
-    (predict-markov (cdr predictor) input)))
+    (if (eq (car predictor) 'markov)
+        (predict-markov (cdr predictor) input)
+      (car (predict-combo (cdr predictor) input)))))
 
 (defun mk-rwm (predictors)
   (mapcar (lambda (p) (cons 1.0 p)) predictors))
@@ -367,19 +402,12 @@
   (rwm-learn-words rwm (split-string string) (split-string labels)))
 
 (setq test-lev (init-lev dvorak-keys -1 dict))
+(setq test-full (build-markov-full corpus))
 (setq test-drop (init-lev dvorak-keys ?r dict))
 (setq test-markov (build-markov corpus))
-(setq test-rwm (mk-rwm (list (mk-pred-lev test-lev) (mk-pred-markov test-markov))))
-(setq res-rwm (rwm-learn-string test-rwm "I am a dude who likes to tearn the theorp o machines"
-                                "I am a dude who likes to learn the theory of machines"))
+(setq test-rwm (mk-rwm (list (mk-pred-lev test-lev) (mk-pred-markov test-markov)
+                             (mk-pred-combo test-lev test-full)
+                             )))
 (setq res-rwm (rwm-learn-string test-rwm "I thnk he would if he could" "I think he would if he could"))
 
-
-(setq excellent res-rwm)
-(setq res1 (cadr res-rwm))
-(setq res2 (cadr (cdr res-rwm)))
-;(setq result (predict-lev test-drop "thery"))
-;(setq test-lev (cdr (learn-word test-lev "monad" "monad")))
-"hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
-machines leaning machine learning theory"
 
