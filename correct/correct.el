@@ -16,6 +16,13 @@
 ((?\' ?\") (?q ?Q)   (?j ?J)   (?k ?K)  (?x ?X)  (?b ?B)  (?m ?M)  (?w ?W)  (?v ?V)  (?z ?Z))
 ))
 
+(setq qwerty-keys  '(
+((?\` ?\~) (?1 ?\!)  (?2 ?\@)  (?3 ?\#) (?4 ?\$) (?5 ?\%) (?6 ?^) (?7 ?\&) (?8 ?\*) (?9 ?\() (?0 ?\)) (?\- ?\_)  (?\= ?\+))
+((?q ?Q) (?w ?W) (?e ?E) (?r ?R)  (?t ?T)  (?y ?Y)  (?u ?U)  (?i ?I)  (?o ?O)  (?p ?P)  (?\[ ?\{) (?\] ?\})  (?\\ ?\|))
+((?a ?A)   (?s ?S)   (?d ?D)   (?f ?F)  (?g ?G)  (?h ?H)  (?j ?J)  (?k ?K)  (?l ?L)  (?\; ?\:)  (?\' ?\"))
+((?z ?Z) (?x ?X)   (?c ?C)   (?v ?V)  (?b ?B)  (?n ?N)  (?m ?M)  (?\, ?\<)  (?\. ?\>)  (?\/ ?\?))
+))
+
 (setq all-keys
  '(?\$ ?\& ?\[ ?\{ ?\} ?\( ?\= ?\* ?\) ?\+ ?\] ?\! ?\# ?\; ?\, ?\. ?\/ ?\@ ?\\
    ?\' ?\~ ?\% ?\` ?\? ?^ ?\| ?\: ?\< ?\> ?\" ?7 ?5 ?3 ?1 ?9 ?0 ?2 ?4 ?6 ?8 ?p
@@ -232,8 +239,38 @@
      hash)
     freq-list))
 
+(defun best-of-hash (hash)
+  (maphash
+   (lambda (prev count-prevhash)
+     (let ((best-word nil)
+           (best-count nil))
+     (maphash (lambda (next next-count)
+                (if (or (null best-count) (> next-count best-count))
+                    (progn (setq best-count next-count)
+                           (setq best-word next))))
+              (cdr count-prevhash))
+     (puthash prev best-word hash)))
+   hash)
+  hash)
+
 (defun sort-by-freq (rules)
   (safe-sort rules (lambda (rule1 rule2) (> (car (cddr rule1)) (car (cddr rule2))))))
+
+(defun build-markov (corpus)
+  (let* ((words (split-string corpus))
+         (pair-list (pairs words))
+         (counts (do-count pair-list (make-hash-table :test 'equal))))
+    (best-of-hash counts)))
+
+(defun markov-rules (corpus rule-count)
+  "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
+   previous word. Returns rules as a list of triples (prev, next, p) that say 'If the
+   previous word was PREV, predict NEXT with confidence P'."
+  (let* ((words (split-string corpus))
+         (pair-list (pairs words))
+         (counts (do-count pair-list (make-hash-table :test 'equal)))
+         (freqs (freq-of-count counts)))
+    (take (sort-by-freq freqs) rule-count)))
 
 (defun take-t (L n acc)
   (if (< n 1) acc
@@ -253,9 +290,13 @@
 (defun mk-pred-markov (state)
   (cons 'markov state))
 
+(defun predict-markov (p input)
+  (gethash input p))
+
 (defun predict (predictor input)
   (if (eq (car predictor) 'lev)
-      (car (predict-lev (cdr predictor) input))))
+      (car (predict-lev (cdr predictor) input))
+    (predict-markov (cdr predictor) input)))
 
 (defun mk-rwm (predictors)
   (mapcar (lambda (p) (cons 1.0 p)) predictors))
@@ -327,8 +368,9 @@
 
 (setq test-lev (init-lev dvorak-keys -1 dict))
 (setq test-drop (init-lev dvorak-keys ?r dict))
-(setq test-rwm (mk-rwm (list (mk-pred-lev test-lev))))
-(setq res-rwm (rwm-learn-string (cdr res-rwm) "I am a dude who likes to tearn the theorp o machines"
+(setq test-markov (build-markov corpus))
+(setq test-rwm (mk-rwm (list (mk-pred-lev test-lev) (mk-pred-markov test-markov))))
+(setq res-rwm (rwm-learn-string test-rwm "I am a dude who likes to tearn the theorp o machines"
                                 "I am a dude who likes to learn the theory of machines"))
 (setq res-rwm (rwm-learn-string test-rwm "I thnk he would if he could" "I think he would if he could"))
 
@@ -341,12 +383,3 @@
 "hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
 machines leaning machine learning theory"
 
-(defun markov-rules (corpus rule-count)
-  "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
-   previous word. Returns rules as a list of triples (prev, next, p) that say 'If the
-   previous word was PREV, predict NEXT with confidence P'."
-  (let* ((words (split-string corpus))
-         (pair-list (pairs words))
-         (counts (do-count pair-list (make-hash-table :test 'equal)))
-         (freqs (freq-of-count counts)))
-    (take (sort-by-freq freqs) rule-count)))
