@@ -3,7 +3,7 @@
 ;(load "~/Documents/emacs/correct/wiki")
 ;(load "~/Documents/emacs/correct/bnc1k")
 (require 'cl)
-
+(setq max-specpdl-size 100000)
 (defun cadar (x) (car (cdr (car x))))
 
 ; Keyboard layouts - each layout is a list of rows, each of which is a list of pairs of characters on the same key.
@@ -94,6 +94,7 @@
     (/ c 0)))
 (defun dist-cost (dist d1 d2)
   (aref (aref dist d1) d2))
+
 (defun levenshtein (dist subst s1 s2)
   (let ((memo (memo-table (length s1) (length s2))))
     (flet ((lev (i j)
@@ -106,8 +107,8 @@
                       (let* ((c1 (aref s1 i))
                              (c2 (aref s2 j))
                              (res (min (+ (drop-cost subst c1) (lev (- i 1) j))
-                                       (+ (drop-cost subst c2) (lev i (- j 1)))
-                                       (+ (lev (- i 1) (- j 1))
+                                       (+ 1 (lev i (- j 1)))
+                                       (+ 1 (lev (- i 1) (- j 1))
                                           (dist-cost dist c1 c2)))))
                         (aset (aref memo i) j res)
                         res))))))
@@ -182,14 +183,6 @@
          (pred-dist (cdr prediction)))
     (cons pred-word (update-state state label pred-word))))
 
-(setq test-lev (init-lev dvorak-keys -1 dict))
-(setq result (predict-lev test-lev "thery"))
-(setq test-lev (cdr (learn-word test-lev "monad" "monad")))
-"hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
-machines leaning machine learning theory"
-
-
-
 (defun pairs-t (L acc) "All pairs of consecutive elements in L"
   (if (null L)
       acc
@@ -254,6 +247,99 @@ machines leaning machine learning theory"
       (setq L (cdr L)))
     (reverse acc)))
 
+(defun mk-pred-lev (state)
+  (cons 'lev state))
+
+(defun mk-pred-markov (state)
+  (cons 'markov state))
+
+(defun predict (predictor input)
+  (if (eq (car predictor) 'lev)
+      (car (predict-lev (cdr predictor) input))))
+
+(defun mk-rwm (predictors)
+  (mapcar (lambda (p) (cons 1.0 p)) predictors))
+
+(defun total-weight (predictors)
+  (let ((weight 0.0))
+    (while (not (null predictors))
+      (setq weight (+ weight (caar predictors)))
+      (setq predictors (cdr predictors)))
+    weight))
+
+(defun avg-weight (predictors)
+  (/ (total-weight predictors) (float (length predictors))))
+
+(defun threshold-weight (predictors)
+  (/ (avg-weight predictors) 4.0))
+
+(defun rwm-majority (weights predictions)
+  (let ((weight-table (make-hash-table :test 'eq))
+        (best-pred nil)
+        (best-weight nil))
+    (while (not (null weights))
+      (let* ((weight (car weights))
+             (pred (car predictions))
+             (old-weight (gethash pred weight-table)))
+        (if old-weight
+            (puthash pred (+ weight old-weight) weight-table)
+          (puthash pred weight weight-table))
+        (setq weights (cdr weights))
+        (setq predictions (cdr predictions))))
+    (maphash (lambda (k w) (if (or (null best-weight) (> w best-weight))
+                             (setq best-pred k)
+                             (setq best-weight weight))) weight-table)
+    best-pred))
+
+(defun update-predictor (pred theta)
+  (if (< (car pred) theta) pred
+    (cons (/ (car pred) 2.0) (cdr pred))))
+
+(defun rwm-update (rwm predictions majority)
+  (let* ((theta (threshold-weight rwm))
+         (new nil))
+    (while (not (null rwm))
+      (if (string= (car predictions) majority)
+          (setq new (cons (car rwm) new))
+        (setq new (cons (update-predictor (car rwm) theta) new)))
+      (setq rwm (cdr rwm))
+      (setq predictions (cdr predictions)))
+    new))
+
+(defun rwm-learn-word (rwm example label)
+  (let* ((predictions (mapcar (lambda (p) (predict (cdr p) example)) rwm))
+         (weights (mapcar (function car) rwm))
+         (majority (rwm-majority weights predictions)))
+    (cons majority (rwm-update rwm predictions majority))))
+
+(defun rwm-learn-words (rwm words labels)
+  (let ((output nil))
+    (while (not (null words))
+      (let ((res (rwm-learn-word rwm (car words) (car labels))))
+        (setq output (cons (car res) output))
+        (setq rwm (cdr res))
+        (setq words (cdr words))
+        (setq labels (cdr labels))))
+    (cons (nreverse output) rwm)))
+
+(defun rwm-learn-string (rwm string labels)
+  (rwm-learn-words rwm (split-string string) (split-string labels)))
+
+(setq test-lev (init-lev dvorak-keys -1 dict))
+(setq test-drop (init-lev dvorak-keys ?r dict))
+(setq test-rwm (mk-rwm (list (mk-pred-lev test-lev))))
+(setq res-rwm (rwm-learn-string (cdr res-rwm) "I am a dude who likes to tearn the theorp o machines"
+                                "I am a dude who likes to learn the theory of machines"))
+(setq res-rwm (rwm-learn-string test-rwm "I thnk he would if he could" "I think he would if he could"))
+
+
+(setq excellent res-rwm)
+(setq res1 (cadr res-rwm))
+(setq res2 (cadr (cdr res-rwm)))
+;(setq result (predict-lev test-drop "thery"))
+;(setq test-lev (cdr (learn-word test-lev "monad" "monad")))
+"hi veeryone my name is brandaon i am a guy and i like to learn machine learning thery about
+machines leaning machine learning theory"
 
 (defun markov-rules (corpus rule-count)
   "Given a CORPUS string, generates a set of RULE-COUNT prediction rules based on the
